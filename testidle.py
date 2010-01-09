@@ -1,5 +1,15 @@
 from twisted.mail  import imap4
-from twisted.internet import protocol, defer, task
+from twisted.internet import protocol, defer
+
+Command = imap4.Command
+
+class myCommand(imap4.Command):
+    def format(self, tag=None):
+        if tag is None:
+            return self.command
+        elif self.args is None:
+            return ' '.join((tag, self.command))
+        return ' '.join((tag, self.command, self.args))
 
 class IMAPFolderListProtocol(imap4.IMAP4Client):
 
@@ -39,7 +49,7 @@ class IMAPFolderListProtocol(imap4.IMAP4Client):
 
         cmd = 'IDLE'
         resp = ('IDLE',)
-        d = self.sendCommand(imap4.Command(cmd, wantResponse=resp, continuation=self.__cbIDLE))
+        d = self.sendCommand(Command(cmd, wantResponse=resp, continuation=self.__cbIDLE))
         d.addCallback(self.__cbterminateIDLE)
         return d
 
@@ -51,8 +61,12 @@ class IMAPFolderListProtocol(imap4.IMAP4Client):
 
     def sendCommand(self, cmd):
         cmd.defer = defer.Deferred()
-        if self.waiting:
+        if self.waiting and cmd.command != 'DONE':
             self.queued.append(cmd)
+            return cmd.defer
+        elif self.waiting and cmd.command == 'DONE':
+            #self.sendLine(cmd.format(self.waiting))
+            self.sendLine(cmd.command)
             return cmd.defer
         t = self.makeTag()
         self.tags[t] = cmd
@@ -64,8 +78,10 @@ class IMAPFolderListProtocol(imap4.IMAP4Client):
     def IDLEDone(self):
         print 'running IDLEDone'
         cmd = 'DONE'
-        d = self.sendCommand(imap4.Command(cmd))
-        return d
+        cmd = Command(cmd)
+        cmd.defer = defer.Deferred()
+        self.sendLine(cmd.command)
+        return cmd.defer
 
     def __cbterminateIDLE(self, *args, **kwargs):
         print '__cbterminateIDLE'
@@ -76,9 +92,12 @@ class IMAPFolderListProtocol(imap4.IMAP4Client):
     def __cbIDLE(self, rest):
         print 'DEBUG- __cbIDLE\n\trest: %s' % rest
         if 'accepted, awaiting DONE command' in rest:
+            #print self.waiting
+            #print self._lastCmd
+            #print self.tags
             self.state = 'IDLE'
-            self.keepAlive()
-            reactor.callLater( 30, self.IDLEDone)
+            #self.keepAlive()
+            reactor.callLater( 10, self.IDLEDone)
             return
             d = reactor.callLater( 30, self.IDLEDone)
             return d
