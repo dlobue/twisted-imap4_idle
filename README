@@ -1,3 +1,5 @@
 At the moment these are just adding IDLE on after the fact.
 testidle.py works - more or less - but is messy and has a bunch of debugging code.
 idle-addon.py doesn't work just yet. ignore this for now.
+
+used termstyle module to provide colored text support to make debugging easier.
